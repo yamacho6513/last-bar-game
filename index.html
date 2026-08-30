@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>RADIA QUEST TEST</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#061018;touch-action:none;font-family:monospace}canvas{width:100vw;height:100vh}
+#pad{position:fixed;left:20px;bottom:20px;width:150px;height:150px;border:3px solid #aaa;border-radius:50%;background:#0009;color:#fff}
+.k{position:absolute;width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-size:26px;user-select:none}
+#u{left:51px;top:2px}#d{left:51px;bottom:2px}#l{left:2px;top:51px}#r{right:2px;top:51px}#a{left:51px;top:51px;border:2px solid #aaa;border-radius:50%;font-size:18px}</style></head>
+<body><canvas id="g"></canvas><div id="pad"><div class="k" id="u">▲</div><div class="k" id="d">▼</div><div class="k" id="l">◀</div><div class="k" id="r">▶</div><div class="k" id="a">A</div></div>
+<script>
+const c=document.getElementById('g'),q=c.getContext('2d');let p={x:innerWidth/2,y:innerHeight*.72},k={},dlg=false;
+function rs(){c.width=innerWidth;c.height=innerHeight}rs();onresize=rs;
+[['u','u'],['d','d'],['l','l'],['r','r']].forEach(([id,n])=>{let e=document.getElementById(id);e.onpointerdown=v=>{v.preventDefault();k[n]=1;e.setPointerCapture(v.pointerId)};e.onpointerup=e.onpointercancel=()=>k[n]=0});
+document.getElementById('a').onpointerdown=e=>{e.preventDefault();dlg=!dlg};
+function loop(){let w=c.width,h=c.height,s=2.5;if(!dlg){if(k.u)p.y-=s;if(k.d)p.y+=s;if(k.l)p.x-=s;if(k.r)p.x+=s;p.x=Math.max(w*.31,Math.min(w*.69,p.x));p.y=Math.max(20,Math.min(h-20,p.y))}
+q.fillStyle='#061018';q.fillRect(0,0,w,h);q.fillStyle='#c9c2a6';q.fillRect(w*.28,0,w*.44,h);
+q.fillStyle='#8b2020';q.fillRect(w*.28,65,w*.44,10);q.fillRect(w*.28,h-85,w*.44,10);
+q.fillStyle='#e9d9a5';q.fillRect(w*.32,110,w*.36,55);q.fillStyle='#111';q.font='16px monospace';q.textAlign='center';q.fillText('東門街 TEST',w/2,143);
+q.fillStyle='#673d78';q.fillRect(w/2-10,h*.38-10,20,20);q.fillStyle='#fff';q.font='12px monospace';q.fillText('NPC',w/2,h*.38-16);
+q.fillStyle='#2868b2';q.fillRect(p.x-9,p.y-9,18,18);q.fillStyle='#f2d05c';q.fillRect(p.x-5,p.y-14,10,6);
+if(dlg){q.fillStyle='#000';q.fillRect(12,h-145,w-24,100);q.strokeStyle='#fff';q.strokeRect(12,h-145,w-24,100);q.fillStyle='#fff';q.textAlign='left';q.font='17px monospace';q.fillText('テスト会話です。',28,h-103)}
+requestAnimationFrame(loop)}loop();
+</script></body></html>
