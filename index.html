@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>RADIA QUEST</title>
+<!-- GitHub Pages split-assets build v02 -->
+<style>
+*{box-sizing:border-box;-webkit-user-select:none;user-select:none;touch-action:none}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif}
+#game{position:fixed;inset:0;width:100%;height:100%;background:#000;display:block}
+#fade{position:fixed;inset:0;background:#000;z-index:30;pointer-events:none;opacity:0;transition:opacity .28s ease}
+#title{position:fixed;inset:0;background:#000;z-index:40;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#titleImg{width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity 1.0s ease;background:#06151e}
+#title.ready #titleImg{opacity:1}
+#mapToast{position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:12;color:white;background:rgba(0,0,0,.48);border:1px solid rgba(255,255,255,.18);padding:7px 13px;border-radius:999px;font-size:12px;opacity:0;transition:opacity .3s}
+#dialogue{position:fixed;left:10px;right:10px;bottom:calc(188px + env(safe-area-inset-bottom));z-index:20;min-height:112px;background:rgba(4,6,10,.95);border:2px solid rgba(255,255,255,.45);border-radius:7px;color:white;padding:12px 14px 14px;display:none;box-shadow:0 10px 28px rgba(0,0,0,.45)}
+#speaker{font-weight:700;color:#f3d37b;font-size:14px;margin-bottom:7px}
+#text{font-size:16px;line-height:1.7;white-space:pre-wrap;min-height:52px}
+#next{position:absolute;right:12px;bottom:8px;font-size:12px;color:#ddd}
+#pad{position:fixed;left:18px;bottom:calc(18px + env(safe-area-inset-bottom));width:132px;height:132px;border-radius:50%;background:rgba(5,8,14,.30);border:2px solid rgba(255,255,255,.20);z-index:15;backdrop-filter:blur(2px)}
+.ctrl{position:absolute;border:0;background:transparent;color:#fff;font-weight:700;font-size:26px;display:flex;align-items:center;justify-content:center;padding:0}
+#up{width:44px;height:44px;left:42px;top:0px}
+#down{width:44px;height:44px;left:42px;bottom:0px}
+#left{width:44px;height:44px;left:0px;top:42px}
+#right{width:44px;height:44px;right:0px;top:42px}
+#aBtn{width:52px;height:52px;left:38px;top:38px;border-radius:50%;background:rgba(255,255,255,.09);border:2px solid rgba(255,255,255,.34);font-size:26px}
+#pad::after{content:"";position:absolute;inset:15px;border-radius:50%;border:1px solid rgba(255,255,255,.08);pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="fade"></div>
+<div id="mapToast"></div>
+
+<div id="dialogue">
+  <div id="speaker"></div>
+  <div id="text"></div>
+  <div id="next">A</div>
+</div>
+
+<div id="pad">
+  <button class="ctrl" id="up">▲</button>
+  <button class="ctrl" id="left">◀</button>
+  <button class="ctrl" id="right">▶</button>
+  <button class="ctrl" id="down">▼</button>
+  <button class="ctrl" id="aBtn">A</button>
+</div>
+
+<div id="title"><img id="titleImg" src="assets/images/title.png" alt=""></div>
+
+<script>
+const IMG = {"title": "assets/images/title.png", "street": "assets/images/higashimon.png", "shrine": "assets/images/ikuta_shrine.png", "b1": "assets/images/building_1f.png", "b2": "assets/images/building_2f.png", "bar": "assets/images/bar.png"};
+const HERO = {"down": ["assets/sprites/hero_down_0.png", "assets/sprites/hero_down_1.png", "assets/sprites/hero_down_2.png"], "left": ["assets/sprites/hero_left_0.png", "assets/sprites/hero_left_1.png", "assets/sprites/hero_left_2.png"], "right": ["assets/sprites/hero_right_0.png", "assets/sprites/hero_right_1.png", "assets/sprites/hero_right_2.png"], "up": ["assets/sprites/hero_up_0.png", "assets/sprites/hero_up_1.png", "assets/sprites/hero_up_2.png"]};
+const BARTENDER = "assets/sprites/bartender.png";
+const METAL = "assets/sprites/metal_slime.png";
+const AUDIO = {"street": "assets/audio/higashimon.wav", "shrine": "assets/audio/ikuta_shrine.wav", "jazz": "assets/audio/bar_2f.wav"};
+
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+ctx.imageSmoothingEnabled=false;
+const fadeEl=document.getElementById("fade");
+const toast=document.getElementById("mapToast");
+const dlg=document.getElementById("dialogue");
+const speakerEl=document.getElementById("speaker");
+const textEl=document.getElementById("text");
+const title=document.getElementById("title");
+const titleImg=document.getElementById("titleImg");
+
+let W=innerWidth,H=innerHeight,dpr=Math.max(1,Math.min(2,devicePixelRatio||1));
+function resize(){
+  W=innerWidth;H=innerHeight;
+  canvas.width=Math.floor(W*dpr); canvas.height=Math.floor(H*dpr);
+  canvas.style.width=W+"px"; canvas.style.height=H+"px";
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+addEventListener("resize",resize); resize();
+
+const images={};
+for(const [k,src] of Object.entries(IMG)){const im=new Image();im.src=src;images[k]=im}
+const heroImgs={};
+for(const d of ["up","down","left","right"]){
+  heroImgs[d]=HERO[d].map(src=>{const i=new Image();i.src=src;return i;});
+}
+const bartenderImg=new Image(); bartenderImg.src=BARTENDER;
+const metalImg=new Image(); metalImg.src=METAL;
+
+const audio={
+ street:new Audio(AUDIO.street),
+ shrine:new Audio(AUDIO.shrine),
+ jazz:new Audio(AUDIO.jazz)
+};
+Object.values(audio).forEach(a=>{a.loop=true;a.volume=.28;a.preload="auto"})
+let currentBgm=null;
+async function setBgm(key){
+  if(currentBgm===key) return;
+  if(currentBgm && audio[currentBgm]) audio[currentBgm].pause();
+  currentBgm=key;
+  if(key && audio[key]){try{audio[key].currentTime=0;await audio[key].play()}catch(e){}}
+}
+
+function stairSE(){
+  try{
+    const ac=new (window.AudioContext||window.webkitAudioContext)();
+    const t=ac.currentTime;
+    [0,.09,.18,.27].forEach((dt,i)=>{
+      const o=ac.createOscillator(),g=ac.createGain();
+      o.type="square"; o.frequency.value=90+(i%2)*25;
+      g.gain.setValueAtTime(.0001,t+dt);g.gain.exponentialRampToValueAtTime(.08,t+dt+.005);g.gain.exponentialRampToValueAtTime(.0001,t+dt+.055);
+      o.connect(g).connect(ac.destination);o.start(t+dt);o.stop(t+dt+.06);
+    });
+    setTimeout(()=>ac.close(),800);
+  }catch(e){}
+}
+
+const maps={
+ street:{
+  key:"street", name:"東門街", w:941,h:1672,scale:1,viewW:500,bgm:"street",
+  spawn:{x:470,y:1480},
+  interact:[
+    {x:402,y:330,name:"酔っ払い",text:["あー おもしれーことねーかなー","酒飲みてー"]},
+    {x:575,y:405,name:"酒屋",text:["ラディアに行きたいのかい？","たこ焼き屋の向かいのビルだよ"]},
+    {x:493,y:450,name:"スライム",text:["ピキー"]},
+    {x:540,y:595,name:"キャバ嬢",text:["お兄さん。一軒どう？"]},
+    {x:540,y:780,name:"サラリーマン",text:["はー 仕事疲れたー"]},
+    {x:457,y:1280,name:"スライム",text:["……何も言わず こちらを見つめている。"]}
+  ]
+ },
+ shrine:{
+  key:"shrine", name:"生田神社", w:3344,h:1882,scale:2,viewW:900,bgm:"shrine",
+  spawn:{x:3060,y:1390},
+  interact:[{x:1680,y:640,name:"",text:["おいのりをしますか？","……おいのりをしました。"]},
+            {x:1680,y:1030,name:"メタルスライム",text:["ここは神様がいる場所だよ！"],metal:true}]
+ },
+ b1:{
+  key:"b1",name:"東門ビレッジ 1F",w:1254,h:1254,scale:1,viewW:720,bgm:"street",
+  spawn:{x:1010,y:1050},
+  interact:[{x:810,y:915,name:"エレベーター",text:["故障中"]},
+            {x:1050,y:360,name:"女性",text:["ラディアに来たのかい？"],npc:true}]
+ },
+ b2:{
+  key:"b2",name:"東門ビレッジ 2F",w:1254,h:1254,scale:1,viewW:720,bgm:"jazz",
+  spawn:{x:180,y:1030},
+  interact:[{x:810,y:920,name:"エレベーター",text:["故障中"]}]
+ },
+ bar:{
+  key:"bar",name:"RADIA",w:1086,h:1448,scale:1,viewW:650,bgm:"jazz",
+  spawn:{x:285,y:1170},
+  interact:[{x:470,y:520,name:"マスター",text:["いらっしゃい！","ようこそラディアへ！"],bartender:true}]
+ }
+};
+
+let map=maps.street;
+const p={x:map.spawn.x,y:map.spawn.y,dir:"up",moving:false,anim:1,r:18};
+const held={up:false,down:false,left:false,right:false};
+let last=performance.now(), dialogue=null, typingTimer=null, nearby=null, changing=false, transitionGraceUntil=0;
+
+function showToast(name){
+ toast.textContent=name; toast.style.opacity="1";
+ clearTimeout(showToast.t); showToast.t=setTimeout(()=>toast.style.opacity="0",1400);
+}
+
+function setMap(key,spawn){
+ map=maps[key];
+ p.x=spawn?.x ?? map.spawn.x; p.y=spawn?.y ?? map.spawn.y;
+ p.moving=false; nearby=null; transitionGraceUntil=performance.now()+650;
+ setBgm(map.bgm);
+ showToast(map.name);
+}
+
+function fadeTransition(key,spawn,stair=false){
+ if(changing)return; changing=true;
+ if(stair) stairSE();
+ fadeEl.style.opacity="1";
+ setTimeout(()=>{setMap(key,spawn);setTimeout(()=>{fadeEl.style.opacity="0";changing=false},90)},300);
+}
+
+function inRect(x,y,r){return x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h}
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+
+function streetWalkable(x,y){
+ const main = x>=315 && x<=625 && y>=55 && y<=1620;
+ const shrineLane = x>=190 && x<=345 && y>=430 && y<=610;
+ const villageLane = x>=590 && x<=760 && y>=300 && y<=580;
+ return main||shrineLane||villageLane;
+}
+function indoorWalkable(x,y){
+ const outer=x>=95&&x<=1160&&y>=220&&y<=1110;
+ const inner=x>=300&&x<=955&&y>=300&&y<=955;
+ return outer&&!inner;
+}
+function barWalkable(x,y){
+ if(!(x>=85&&x<=1000&&y>=200&&y<=1190))return false;
+ const blocks=[
+  {x:90,y:300,w:430,h:605}, // counter body
+  {x:675,y:195,w:310,h:690}, // seating / tables
+  {x:665,y:875,w:320,h:230}  // slots
+ ];
+ return !blocks.some(r=>inRect(x,y,r));
+}
+function shrineWalkable(x,y){
+ if(!(x>=70&&x<=3270&&y>=70&&y<=1810)) return false;
+ const s=2;
+ const obs=[
+  {x:560*s,y:35*s,w:520*s,h:300*s},
+  {x:145*s,y:110*s,w:320*s,h:290*s},
+  {x:1080*s,y:110*s,w:290*s,h:560*s},
+  {x:575*s,y:465*s,w:360*s,h:315*s},
+  {x:150*s,y:560*s,w:300*s,h:260*s},
+  {x:455*s,y:575*s,w:150*s,h:180*s}
+ ];
+ return !obs.some(r=>inRect(x,y,r));
+}
+function canWalk(x,y){
+ if(map.key==="street")return streetWalkable(x,y);
+ if(map.key==="shrine")return shrineWalkable(x,y);
+ if(map.key==="b1"||map.key==="b2")return indoorWalkable(x,y);
+ if(map.key==="bar")return barWalkable(x,y);
+ return true;
+}
+
+function checkTransitions(){
+ if(changing||dialogue||performance.now()<transitionGraceUntil)return;
+ if(map.key==="street"){
+   if(p.x<225&&p.y>450&&p.y<590) return fadeTransition("shrine",{x:3090,y:1390});
+   if(p.x>710&&p.y>335&&p.y<555) return fadeTransition("b1",{x:1010,y:1045});
+   if(p.y<62){p.y=1605;return}
+   if(p.y>1610){p.y=70;return}
+ }
+ if(map.key==="shrine" && p.x>3220 && p.y>1200 && p.y<1600) return fadeTransition("street",{x:335,y:520});
+ if(map.key==="b1"){
+   if(p.x<205&&p.y>1015) return fadeTransition("b2",{x:245,y:975},true);
+   if(p.x>870&&p.y>1080) return fadeTransition("street",{x:615,y:470});
+ }
+ if(map.key==="b2"){
+   if(p.x<205&&p.y>1015) return fadeTransition("b1",{x:245,y:975},true);
+   if(p.x>700&&p.x<920&&p.y<315) return fadeTransition("bar",{x:285,y:1160});
+ }
+ if(map.key==="bar" && p.x>180&&p.x<390&&p.y>1140) return fadeTransition("b2",{x:800,y:300});
+}
+
+function openDialogue(obj){
+ dialogue={obj,index:0,full:"",shown:"",typing:false};
+ dlg.style.display="block"; speakerEl.textContent=obj.name||"";
+ typeLine(obj.text[0]);
+}
+function typeLine(line){
+ clearInterval(typingTimer);
+ dialogue.full=line; dialogue.shown=""; dialogue.typing=true; textEl.textContent="";
+ let i=0;
+ typingTimer=setInterval(()=>{
+  if(i>=line.length){clearInterval(typingTimer);dialogue.typing=false;return}
+  dialogue.shown+=line[i++]; textEl.textContent=dialogue.shown;
+ },28);
+}
+function advanceDialogue(){
+ if(!dialogue){
+   if(nearby)openDialogue(nearby);
+   return;
+ }
+ if(dialogue.typing){clearInterval(typingTimer);dialogue.typing=false;textEl.textContent=dialogue.full;return}
+ dialogue.index++;
+ if(dialogue.index>=dialogue.obj.text.length){
+   dialogue=null; dlg.style.display="none"; speakerEl.textContent="";textEl.textContent="";return
+ }
+ typeLine(dialogue.obj.text[dialogue.index]);
+}
+
+function nearestInteract(){
+ let best=null,bd=9999;
+ for(const o of map.interact){
+  const d=dist(p,o);
+  if(d<75&&d<bd){best=o;bd=d}
+ }
+ nearby=best;
+}
+
+function drawNPCIcon(x,y){
+ ctx.save();
+ ctx.translate(x,y);
+ ctx.fillStyle="#4a3527";ctx.fillRect(-8,-20,16,11);
+ ctx.fillStyle="#c9a082";ctx.fillRect(-6,-9,12,9);
+ ctx.fillStyle="#333";ctx.fillRect(-8,0,16,18);
+ ctx.fillStyle="#777";ctx.fillRect(-8,6,16,3);
+ ctx.restore();
+}
+
+function drawWorldImage(){
+ const img=images[map.key];
+ const worldW=map.w, worldH=map.h;
+
+ // Normal maps scroll as before.
+ // RADIA bar is intentionally shown as one complete room on a phone screen.
+ let scale, viewW, viewH, camX, camY;
+ if(map.key==="bar"){
+   scale=Math.min(W/worldW, H/worldH);
+   viewW=W/scale;
+   viewH=H/scale;
+   camX=(worldW-viewW)/2;
+   camY=(worldH-viewH)/2;
+ }else{
+   viewW=map.viewW;
+   scale=W/viewW;
+   viewH=H/scale;
+   camX=p.x-viewW/2;
+   camY=p.y-viewH/2;
+   camX=Math.max(0,Math.min(worldW-viewW,camX));
+   camY=Math.max(0,Math.min(worldH-viewH,camY));
+   if(worldW<viewW)camX=(worldW-viewW)/2;
+   if(worldH<viewH)camY=(worldH-viewH)/2;
+ }
+
+ ctx.save();
+ ctx.scale(scale,scale);
+ ctx.translate(-camX,-camY);
+ if(img && img.complete){
+   ctx.imageSmoothingEnabled=false;
+   ctx.drawImage(img,0,0,worldW,worldH);
+ }
+ // Special live objects
+ if(map.key==="shrine"){
+   const o=map.interact.find(x=>x.metal);
+   if(o&&metalImg.complete) ctx.drawImage(metalImg,o.x-32,o.y-32,64,64);
+ }
+ if(map.key==="b1"){
+   drawNPCIcon(1050,360);
+ }
+ if(map.key==="bar" && bartenderImg.complete){
+   ctx.drawImage(bartenderImg,335,430,70,95);
+ }
+
+ // Exclamation mark above nearest interactable
+ if(nearby && !dialogue){
+   ctx.save();
+   ctx.font="bold 28px sans-serif";
+   ctx.textAlign="center";ctx.textBaseline="middle";
+   ctx.fillStyle="white";ctx.strokeStyle="#111";ctx.lineWidth=5;
+   const yy=nearby.y-52;
+   ctx.strokeText("!",nearby.x,yy);ctx.fillText("!",nearby.x,yy);
+   ctx.restore();
+ }
+
+ // Hero
+ const frames=heroImgs[p.dir]||heroImgs.down;
+ let fi=p.moving ? (Math.floor(performance.now()/170)%2?0:2) : 1;
+ const himg=frames[fi];
+ if(himg&&himg.complete){
+   const targetScreenH=72*(W/500), hh=targetScreenH/scale, hw=hh*(himg.naturalWidth/himg.naturalHeight);
+   ctx.drawImage(himg,p.x-hw/2,p.y-hh+10,hw,hh);
+ }
+ ctx.restore();
+}
+
+function update(dt){
+ if(dialogue||changing)return;
+ let dx=0,dy=0;
+ if(held.up)dy-=1;if(held.down)dy+=1;if(held.left)dx-=1;if(held.right)dx+=1;
+ p.moving=!!(dx||dy);
+ if(!p.moving){nearestInteract();return}
+ if(Math.abs(dx)>Math.abs(dy))p.dir=dx<0?"left":"right"; else p.dir=dy<0?"up":"down";
+ const l=Math.hypot(dx,dy)||1;dx/=l;dy/=l;
+ const speed=map.key==="shrine"?190:map.key==="street"?155:145;
+ const nx=p.x+dx*speed*dt, ny=p.y+dy*speed*dt;
+ if(canWalk(nx,p.y))p.x=nx;
+ if(canWalk(p.x,ny))p.y=ny;
+ checkTransitions();nearestInteract();
+}
+
+function loop(t){
+ const dt=Math.min(.033,(t-last)/1000);last=t;
+ ctx.clearRect(0,0,W,H);update(dt);drawWorldImage();requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+
+// Controller position: drag the outer circular rim horizontally.
+// The saved position is kept between visits on the same browser.
+const padEl=document.getElementById("pad");
+let padDrag=null;
+function clampPadLeft(x){
+  const max=Math.max(8, innerWidth-padEl.offsetWidth-8);
+  return Math.max(8,Math.min(max,x));
+}
+padEl.addEventListener("pointerdown",e=>{
+  if(e.target.closest("button")) return;
+  e.preventDefault();
+  padDrag={startX:e.clientX,startLeft:parseFloat(getComputedStyle(padEl).left)||18};
+  try{padEl.setPointerCapture(e.pointerId)}catch(_){}
+});
+padEl.addEventListener("pointermove",e=>{
+  if(!padDrag) return;
+  e.preventDefault();
+  const x=clampPadLeft(padDrag.startLeft+(e.clientX-padDrag.startX));
+  padEl.style.left=x+"px";
+  localStorage.setItem("radiaPadLeft",String(x));
+});
+function endPadDrag(){
+  padDrag=null;
+}
+padEl.addEventListener("pointerup",endPadDrag);
+padEl.addEventListener("pointercancel",endPadDrag);
+const savedPadLeft=parseFloat(localStorage.getItem("radiaPadLeft"));
+if(Number.isFinite(savedPadLeft)) padEl.style.left=clampPadLeft(savedPadLeft)+"px";
+
+// controls
+function bindHold(id,key){
+ const el=document.getElementById(id);
+ const on=e=>{e.preventDefault();held[key]=true};
+ const off=e=>{e.preventDefault();held[key]=false};
+ ["pointerdown","touchstart"].forEach(ev=>el.addEventListener(ev,on,{passive:false}));
+ ["pointerup","pointercancel","pointerout","touchend","touchcancel"].forEach(ev=>el.addEventListener(ev,off,{passive:false}));
+}
+bindHold("up","up");bindHold("down","down");bindHold("left","left");bindHold("right","right");
+document.getElementById("aBtn").addEventListener("pointerdown",e=>{e.preventDefault();advanceDialogue()});
+dlg.addEventListener("pointerdown",e=>{e.preventDefault();advanceDialogue()});
+
+addEventListener("keydown",e=>{
+ if(["ArrowUp","w","W"].includes(e.key))held.up=true;
+ if(["ArrowDown","s","S"].includes(e.key))held.down=true;
+ if(["ArrowLeft","a","A"].includes(e.key))held.left=true;
+ if(["ArrowRight","d","D"].includes(e.key))held.right=true;
+ if([" ","Enter","z","Z"].includes(e.key)){e.preventDefault();advanceDialogue()}
+});
+addEventListener("keyup",e=>{
+ if(["ArrowUp","w","W"].includes(e.key))held.up=false;
+ if(["ArrowDown","s","S"].includes(e.key))held.down=false;
+ if(["ArrowLeft","a","A"].includes(e.key))held.left=false;
+ if(["ArrowRight","d","D"].includes(e.key))held.right=false;
+});
+
+// Opening: black -> title fades in, then touch anywhere to start
+setTimeout(()=>title.classList.add("ready"),650);
+let started=false;
+async function startGame(){
+ if(started)return; started=true;
+ title.style.transition="opacity .55s ease";title.style.opacity="0";
+ await setBgm("street");
+ setTimeout(()=>{title.style.display="none";showToast("東門街")},560);
+}
+title.addEventListener("pointerdown",e=>{e.preventDefault();startGame()});
+addEventListener("keydown",e=>{if(!started&&(e.key==="Enter"||e.key===" "))startGame()});
+</script>
+</body></html>
